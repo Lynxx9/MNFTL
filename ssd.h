@@ -209,7 +209,7 @@ enum block_type {LOG, DATA, LOG_SEQ};
 /*
  * Enumeration of the different FTL implementations.
  */
-enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL};
+
 enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL, IMPL_MNFTL};
 
 #define BOOST_MULTI_INDEX_ENABLE_SAFE_MODE 1
