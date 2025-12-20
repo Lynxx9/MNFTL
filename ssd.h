@@ -44,60 +44,184 @@
 
 namespace ssd {
 
+/* define exit codes for errors */
 #define MEM_ERR -1
 #define FILE_ERR -2
+
+/* Uncomment to disable asserts for production */
 #define NDEBUG
 
+/* some obvious typedefs for laziness */
 typedef unsigned int uint;
 typedef unsigned long ulong;
 
+/* Configuration file parsing for extern config variables defined below */
 void load_entry(char *name, double value, uint line_number);
 void load_config(void);
 void print_config(FILE *stream);
 
 extern const double RAM_READ_DELAY;
 extern const double RAM_WRITE_DELAY;
+
+/* Bus class:
+ * 	delay to communicate over bus
+ * 	max number of connected devices allowed
+ * 	flag value to detect free table entry (keep this negative)
+ * 	number of time entries bus has to keep track of future schedule usage
+ * 	number of simultaneous communication channels - defined by SSD_SIZE */
+
 extern const double BUS_CTRL_DELAY;
 extern const double BUS_DATA_DELAY;
 extern const uint BUS_MAX_CONNECT;
 extern const double BUS_CHANNEL_FREE_FLAG;
 extern const uint BUS_TABLE_SIZE;
+
+/* Ssd class:
+ * 	number of Packages per Ssd (size) */
 extern const uint SSD_SIZE;
+
+/* Package class:
+ * 	number of Dies per Package (size) */
 extern const uint PACKAGE_SIZE;
+
+/* Die class:
+ * 	number of Planes per Die (size) */
 extern const uint DIE_SIZE;
+
+/* Plane class:
+ * 	number of Blocks per Plane (size)
+ * 	delay for reading from plane register
+ * 	delay for writing to plane register
+ * 	delay for merging is based on read, write, reg_read, reg_write 
+ * 		and does not need to be explicitly defined */
 extern const uint PLANE_SIZE;
 extern const double PLANE_REG_READ_DELAY;
 extern const double PLANE_REG_WRITE_DELAY;
+
+/* Block class:
+ * 	number of Pages per Block (size)
+ * 	number of erases in lifetime of block
+ * 	delay for erasing block */
 extern const uint BLOCK_SIZE;
 extern const uint BLOCK_ERASES;
 extern const double BLOCK_ERASE_DELAY;
+
+/* Page class:
+ * 	delay for Page reads
+ * 	delay for Page writes */
 extern const double PAGE_READ_DELAY;
 extern const double PAGE_WRITE_DELAY;
 extern const uint PAGE_SIZE;
 extern const bool PAGE_ENABLE_DATA;
+
+
+/*
+ * Mapping directory
+ */
 extern const uint MAP_DIRECTORY_SIZE;
+
+/*
+ * FTL Implementation
+ */
 extern const uint FTL_IMPLEMENTATION;
+
+/*
+ * LOG page limit for BAST.
+ */
 extern const uint BAST_LOG_BLOCK_LIMIT;
+
+/*
+ * LOG page limit for FAST.
+ */
 extern const uint FAST_LOG_BLOCK_LIMIT;
+
+/*
+ * Number of blocks allowed to be in DFTL Cached Mapping Table.
+ */
 extern const uint CACHE_DFTL_LIMIT;
+
+/*
+ * Parallelism mode
+ */
 extern const uint PARALLELISM_MODE;
+
+/* Virtual block size (as a multiple of the physical block size) */
 extern const uint VIRTUAL_BLOCK_SIZE;
+
+/* Virtual page size (as a multiple of the physical page size) */
 extern const uint VIRTUAL_PAGE_SIZE;
+
 extern const uint NUMBER_OF_ADDRESSABLE_BLOCKS;
+
+/* RAISSDs: Number of physical SSDs */
 extern const uint RAID_NUMBER_OF_PHYSICAL_SSDS;
+
+/*
+ * Memory area to support pages with data.
+ */
 extern void *page_data;
 extern void *global_buffer;
 
+/* Enumerations to clarify status integers in simulation
+ * Do not use typedefs on enums for reader clarity */
+
+/* Page states
+ * 	empty   - page ready for writing (and contains no valid data)
+ * 	valid   - page has been written to and contains valid data
+ * 	invalid - page has been written to and does not contain valid data */
 enum page_state{EMPTY, VALID, INVALID};
+
+/* Block states
+ * 	free     - all pages in block are empty
+ * 	active   - some pages in block are valid, others are empty or invalid
+ * 	inactive - all pages in block are invalid */
 enum block_state{FREE, ACTIVE, INACTIVE};
+
+/* I/O request event types
+ * 	read  - read data from address
+ * 	write - write data to address (page state set to valid)
+ * 	erase - erase block at address (all pages in block are erased - 
+ * 	                                page states set to empty)
+ * 	merge - move valid pages from block at address (page state set to invalid)
+ * 	           to free pages in block at merge_address */
 enum event_type{READ, WRITE, ERASE, MERGE, TRIM};
+
+/* General return status
+ * return status for simulator operations that only need to provide general
+ * failure notifications */
 enum status{FAILURE, SUCCESS};
+
+/* Address valid status
+ * used for the valid field in the address class
+ * example: if valid == BLOCK, then
+ * 	the package, die, plane, and block fields are valid
+ * 	the page field is not valid */
 enum address_valid{NONE, PACKAGE, DIE, PLANE, BLOCK, PAGE};
+
+/*
+ * Block type status
+ * used for the garbage collector specify what pool
+ * it should work with.
+ * the block types are log, data and map (Directory map usually)
+ */
 enum block_type {LOG, DATA, LOG_SEQ};
+
+/*
+ * Enumeration of the different FTL implementations.
+ */
+enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL};
 enum ftl_implementation {IMPL_PAGE, IMPL_BAST, IMPL_FAST, IMPL_DFTL, IMPL_BIMODAL, IMPL_MNFTL};
 
 #define BOOST_MULTI_INDEX_ENABLE_SAFE_MODE 1
 
+/* List classes up front for classes that have references to their "parent"
+ * (e.g. a Package's parent is a Ssd).
+ *
+ * The order of definition below follows the order of this list to support
+ * cases of agregation where the agregate class should be defined first.
+ * Defining the agregate class first enables use of its non-default
+ * constructors that accept args
+ * (e.g. a Ssd contains a Controller, Ram, Bus, and Packages). */
 class Address;
 class Stats;
 class Event;
@@ -123,6 +247,10 @@ class Ram;
 class Controller;
 class Ssd;
 
+/* Class to manage physical addresses for the SSD.  It was designed to have
+ * public members like a struct for quick access but also have checking,
+ * printing, and assignment functionality.  An instance is created for each
+ * physical address in the Event class. */
 class Address
 {
 public:
@@ -246,6 +374,16 @@ private:
     bool noop;
 };
 
+
+/* Single bus channel
+ * Simulate multiple devices on 1 bus channel with variable bus transmission
+ * durations for data and control delays with the Channel class.  Provide the 
+ * delay times to send a control signal or 1 page of data across the bus
+ * channel, the bus table size for the maximum number channel transmissions that
+ * can be queued, and the maximum number of devices that can connect to the bus.
+ * To elaborate, the table size is the size of the channel scheduling table that
+ * holds start and finish times of events that have not yet completed in order
+ * to determine where the next event can be scheduled for bus utilization. */
 class Channel
 {
 public:
@@ -272,6 +410,15 @@ private:
     double ready_at;
 };
 
+
+/* Multi-channel bus comprised of Channel class objects
+ * Simulates control and data delays by allowing variable channel lock
+ * durations.  The sender (controller class) should specify the delay (control,
+ * data, or both) for events (i.e. read = ctrl, ctrl+data; write = ctrl+data;
+ * erase or merge = ctrl).  The hardware enable signals are implicitly
+ * simulated by the sender locking the appropriate bus channel through the lock
+ * method, then sending to multiple devices by calling the appropriate method
+ * in the Package class. */
 class Bus
 {
 public:
@@ -287,6 +434,9 @@ private:
     Channel * const channels;
 };
 
+
+/* The page is the lowest level data storage unit that is the size unit of
+ * requests (events).  Pages maintain their state as events modify them. */
 class Page 
 {
 public:
@@ -304,6 +454,9 @@ private:
     double write_delay;
 };
 
+
+/* The block is the data storage hardware unit where erases are implemented.
+ * Blocks maintain wear statistics for the FTL. */
 class Block 
 {
 public:
@@ -344,6 +497,10 @@ private:
     block_type btype;
 };
 
+
+/* The plane is the data storage hardware unit that contains blocks.
+ * Plane-level merges are implemented in the plane.  Planes maintain wear
+ * statistics for the FTL. */
 class Plane 
 {
 public:
@@ -381,6 +538,9 @@ private:
     uint free_blocks;
 };
 
+
+/* The die is the data storage hardware unit that contains planes and is a flash
+ * chip.  Dies maintain wear statistics for the FTL. */
 class Die 
 {
 public:
@@ -414,6 +574,11 @@ private:
     double last_erase_time;
 };
 
+
+/* The package is the highest level data storage hardware unit.  While the
+ * package is a virtual component, events are passed through the package for
+ * organizational reasons, including helping to simplify maintaining wear
+ * statistics for the FTL. */
 class Package 
 {
 public:
@@ -445,6 +610,9 @@ private:
     double last_erase_time;
 };
 
+
+/* place-holder definitions for GC, WL, FTL, RAM, Controller 
+ * please make sure to keep this order when you replace with your definitions */
 class Garbage_collector 
 {
 public:
@@ -692,6 +860,10 @@ private:
     void print_ftl_statistics();
 };
 
+
+/* This is a basic implementation that only provides delay updates to events
+ * based on a delay value multiplied by the size (number of pages) needed to
+ * be written. */
 class Ram 
 {
 public:
@@ -704,6 +876,15 @@ private:
     double write_delay;
 };
 
+
+/* The controller accepts read/write requests through its event_arrive method
+ * and consults the FTL regarding what to do by calling the FTL's read/write
+ * methods.  The FTL returns an event list for the controller through its issue
+ * method that the controller buffers in RAM and sends across the bus.  The
+ * controller's issue method passes the events from the FTL to the SSD.
+ *
+ * The controller also provides an interface for the FTL to collect wear
+ * information to perform wear-leveling.  */
 class Controller 
 {
 public:
@@ -739,6 +920,10 @@ private:
     FtlParent *ftl;
 };
 
+
+/* The SSD is the single main object that will be created to simulate a real
+ * SSD.  Creating a SSD causes all other objects in the SSD to be created.  The
+ * event_arrive method is where events will arrive from DiskSim. */
 class Ssd 
 {
 public:
