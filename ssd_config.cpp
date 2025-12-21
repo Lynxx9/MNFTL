@@ -154,6 +154,14 @@ uint FAST_LOG_BLOCK_LIMIT = 4;
 uint CACHE_DFTL_LIMIT = 8;
 
 /*
+ * MNFTL
+ */
+uint MNFTL_OOB_SIZE = 128;
+uint MNFTL_ENTRY_SIZE = 4;
+uint OOB_READ_DELAY = 1700;
+uint OOB_WRITE_DELAY = 3300;
+
+/*
  * Parallelism mode.
  * 0 -> Normal
  * 1 -> Striping
@@ -224,6 +232,14 @@ void load_entry(char *name, double value, uint line_number) {
 		FAST_LOG_BLOCK_LIMIT = value;
 	else if (!strcmp(name, "CACHE_DFTL_LIMIT"))
 		CACHE_DFTL_LIMIT = value;
+	else if (!strcmp(name, "MNFTL_OOB_SIZE"))
+    	MNFTL_OOB_SIZE = (uint)value;
+	else if (!strcmp(name, "OOB_READ_DELAY"))
+    	OOB_READ_DELAY = value;
+	else if (!strcmp(name, "OOB_WRITE_DELAY"))
+    	OOB_WRITE_DELAY = value;
+	else if (!strcmp(name, "MNFTL_ENTRY_SIZE"))
+   		MNFTL_ENTRY_SIZE = (uint)value;
 	else if (!strcmp(name, "PARALLELISM_MODE"))
 		PARALLELISM_MODE = value;
 	else if (!strcmp(name, "VIRTUAL_BLOCK_SIZE"))
