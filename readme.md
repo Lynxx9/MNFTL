@@ -1,3 +1,24 @@
+# MNFTL Reproduction Project
+
+This project reproduces and evaluates the **MNFTL (Mapping-aware NAND Flash Translation Layer)** proposed in  
+*“MNFTL: An Efficient Flash Translation Layer for MLC NAND Flash Memory”*  
+by re-implementing the FTL design on top of the **FlashSim** SSD simulator.
+
+The goal of this project is to study how different FTL designs affect performance and garbage collection behavior under various workloads, and to validate the key claims of MNFTL using a controlled simulation environment.
+
+---
+
+## 1. Background
+
+The original paper evaluates MNFTL on a real embedded system platform consisting of:
+
+- ARM Cortex-A8 processor  
+- MLC NAND flash  
+- Linux 3.0.8  
+- FTL implemented as kernel-mode block device drivers  
+
+This setup reflects the complete I/O path:
+Application → File System → OS → FTL → NAND Flash
 
 However, reproducing such a platform is costly and difficult. Therefore, this project uses **FlashSim**, a widely used open-source SSD simulator, to focus on **FTL-level behavior** without OS, filesystem, or I/O scheduling interference.
 
